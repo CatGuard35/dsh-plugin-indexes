@@ -1,0 +1,43 @@
+name: refresh-market-index
+
+on:
+  schedule:
+    # 每天一次：UTC 20:17 ＝ 北京时间 04:17（低峰）。
+    # 不设每小时：4 个文件合计约 9.4 MB，每小时提交会让 git 历史每天膨胀约 225 MB。
+    - cron: "17 20 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-market-index
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: selftest (offline)
+        run: python refresh.py --selftest
+
+      - name: convert upstream sources
+        run: python refresh.py --all
+
+      - name: commit when changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          git commit -m "chore: refresh market index $(date -u +%FT%TZ)"
+          git push

@@ -61,8 +61,11 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / ".sandbox-out" / "market-index"
+# 本脚本就在仓库根 ⇒ 输出直接写仓库根。
+# 2026-10-30 改：原先写到上级 .sandbox-out/market-index，靠手工复制进仓库，
+# 导致仓库里的索引长期停在 2026-10-18 的快照（awesome 2,967 vs 上游 3,993）。
+ROOT = Path(__file__).resolve().parent
+OUT = ROOT
 
 # ── 校验器里的正则（逐字照抄·保证一致）──
 PACKAGE_NAME = re.compile(r"^(?:@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$")
@@ -73,17 +76,15 @@ SEMVER = re.compile(
 )
 LANGUAGE_ID = re.compile(r"^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$")
 
-# ── 四个源 ──
+# ── 只转「上游没有 format 1」的源 ──
+# 2026-10-30 裁：awesome-dsh-plugin 上游已提供原生 format 1
+# （https://awesome-dsh-plugin.com/index.json ＝ https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json），
+# 不再经本仓转换，直接作为索引源添加即可（少一层、且自动跟随上游）。
 SOURCES = {
     "dsh.so": {
         "url": "https://www.dsh.so/plugins-index.json",
         "title": {"en": "dsh.so plugin index", "zh": "dsh.so 插件索引"},
         "kind": "list",
-    },
-    "awesome": {
-        "url": "https://awesome-dsh-plugin.com/plugins.json",
-        "title": {"en": "awesome-dsh-plugin index", "zh": "awesome-dsh-plugin 索引"},
-        "kind": "dict",
     },
     "lanshuagent": {
         "url": "https://dsh.lanshuagent.com/api/plugins",
@@ -383,10 +384,12 @@ def selftest() -> int:
     ck("日期转 Unix 秒", isinstance(parse_date_seconds("2026-10-11T12:25:55Z"), int))
     ck("毫秒自动转秒", parse_date_seconds(1792308493000) < 10**11)
     # ④ 端到端（小样本·不联网）
-    fake = {"plugins": [{"npm": "@a/b", "version": "1.0.0", "description": {"en": "x"},
-                         "url": "https://github.com/a/b", "owner": "a",
-                         "page": "https://x.com/p/1", "category": "ui", "added": "2026-01-01"}]}
-    doc = convert("awesome", fake)
+    # 2026-10-30: awesome 上游已有原生 format 1 ⇒ 不再转换，自检改用 lanshuagent 形状
+    fake = {"plugins": [{"manifest": {"packageName": "@a/b", "version": "1.0.0"},
+                         "description": {"en": "x"}, "url": "https://github.com/a/b",
+                         "owner": "a", "homepage": "https://x.com/p/1",
+                         "category": "ui", "added": "2026-01-01"}]}
+    doc = convert("lanshuagent", fake)
     ck("转换产出 format=1", doc.get("format") == 1)
     ck("转换产出 1 条插件", len(doc.get("plugins", [])) == 1)
     errs = validate(doc)
